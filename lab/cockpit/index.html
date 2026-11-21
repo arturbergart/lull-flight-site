@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="robots" content="noindex,nofollow"><title>Lull · Кабина пилота</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4f1ea;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;font-family:-apple-system,"SF Pro Text","Helvetica Neue",Arial,sans-serif;color:#141414}
+  canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+  .top{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top) + 14px);text-align:center;pointer-events:none}
+  .top .k{font-size:10px;letter-spacing:.32em;text-transform:uppercase;opacity:.75}
+  .top .t{font-size:13px;margin-top:4px;opacity:.9}
+  .bar{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 18px);display:flex;gap:10px;justify-content:center;padding:0 16px}
+  button{font:inherit;font-size:11px;letter-spacing:.18em;text-transform:uppercase;border-radius:999px;padding:13px 18px;border:1px solid #141414;background:rgba(244,241,234,.92);color:#141414;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  button.dark{background:#141414;color:#f4f1ea}
+  .hint{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 78px);transform:translateX(-50%);font-size:12px;background:rgba(244,241,234,.9);padding:8px 14px;border-radius:999px;white-space:nowrap;transition:opacity .6s}
+  .err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:30px;font-size:15px;line-height:1.5}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="top"><div class="k">Lull · кабина пилота</div><div class="t">Над облаками · рассвет · 11 000 м</div></div>
+<div class="hint" id="hint">Тяните пальцем, чтобы осмотреться</div>
+<div class="bar"><button class="dark" id="gyro">Поворот телефоном</button><button id="center">По центру</button></div>
+<div class="err" id="err">Этот браузер не умеет показывать 3D-сцену.</div>
+<script>
+"use strict";
+const D2R=Math.PI/180;
+/* ---------- cockpit picture: a 360° panorama painted on a canvas ----------
+   x = longitude (0 = straight ahead, + = right), y = latitude (+ = up).
+   Windows are cut out, so the live sky shows through them. */
+function paintCockpit(){
+  const W=4096,H=2048,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
+  const X=lon=>(0.5+lon/360)*W, Y=lat=>(0.5-lat/180)*H;
+  const poly=(pts)=>{g.beginPath();pts.forEach(([lo,la],i)=>i?g.lineTo(X(lo),Y(la)):g.moveTo(X(lo),Y(la)));g.closePath()};
+  const rect=(lo1,la1,lo2,la2)=>poly([[lo1,la1],[lo2,la1],[lo2,la2],[lo1,la2]]);
+  const INK='#1b1a18',WALL='#e6e1d6',WALL2='#d9d3c6',PANEL='#cdc6b7',DARK='#2a2926';
+  // walls
+  let gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#d8d2c5');gr.addColorStop(.35,WALL);gr.addColorStop(.62,WALL2);gr.addColorStop(1,'#8f897d');
+  g.fillStyle=gr;g.fillRect(0,0,W,H);
+  // back wall and door
+  g.fillStyle='#ddd7cb';rect(115,60,180,-70);g.fill();rect(-180,60,-115,-70);g.fill();
+  g.fillStyle=WALL;g.strokeStyle=INK;g.lineWidth=3;rect(148,34,172,-62);g.fill();g.stroke();
+  g.beginPath();g.arc(X(152),Y(-12),7,0,7);g.fillStyle=INK;g.fill();
+  g.fillStyle='#bdb6a7';rect(155,24,165,14);g.fill();
+  // overhead panel
+  g.fillStyle=PANEL;poly([[-34,30],[34,30],[26,78],[-26,78]]);g.fill();g.strokeStyle=INK;g.lineWidth=3;g.stroke();
+  g.lineWidth=2;
+  for(let r=0;r<7;r++){const la=35+r*5.6;const half=31-r*0.9;
+    g.strokeStyle='rgba(27,26,24,.45)';g.beginPath();g.moveTo(X(-half),Y(la-1.6));g.lineTo(X(half),Y(la-1.6));g.stroke();
+    for(let c=-half+3;c<half-2;c+=4.2){const on=((r*7+c*3)|0)%5===0;
+      g.fillStyle=on?'#f4f1ea':DARK;g.fillRect(X(c)-9,Y(la)-12,18,22);
+      if(on){g.fillStyle='#e8b04b';g.fillRect(X(c)-7,Y(la)-10,14,5)}}
+  }
+  g.font='bold 22px Helvetica,Arial';g.fillStyle=INK;g.textAlign='center';
+  [['ELEC',-20,32.2],['HYD',-7,32.2],['FUEL',7,32.2],['AIR',20,32.2]].forEach(([t,a,b])=>g.fillText(t,X(a),Y(b)));
+  // glareshield
+  g.fillStyle=DARK;poly([[-62,-9],[62,-9],[60,-19],[-60,-19]]);g.fill();
+  g.fillStyle='#3a3934';rect(-14,-11,14,-17);g.fill();
+  g.font='20px Menlo,monospace';g.fillStyle='#e8b04b';
+  [['SPD 250',-9],['HDG 112',0],['FL 360',9]].forEach(([t,a])=>g.fillText(t,X(a),Y(-14.6)));
+  // main panel
+  gr=g.createLinearGradient(0,Y(-19),0,Y(-52));gr.addColorStop(0,'#c7c0b1');gr.addColorStop(1,'#aea798');
+  g.fillStyle=gr;poly([[-60,-19],[60,-19],[56,-52],[-56,-52]]);g.fill();
+  // screens
+  const scr=(a,b)=>{g.fillStyle='#121212';g.strokeStyle='#3b3a36';g.lineWidth=6;rect(a,-22,b,-44);g.fill();g.stroke()};
+  // PFD
+  scr(-46,-27);{const cx=X(-36.5),cy=Y(-31),w=X(-29)-X(-44),h=Y(-41)-Y(-24);
+    g.save();g.beginPath();g.rect(X(-44),Y(-24),w,h);g.clip();
+    g.fillStyle='#4f6a80';g.fillRect(X(-44),Y(-24),w,cy-Y(-24)+8);g.fillStyle='#6b5843';g.fillRect(X(-44),cy+8,w,h);
+    g.strokeStyle='#f4f1ea';g.lineWidth=3;g.beginPath();g.moveTo(X(-44),cy+8);g.lineTo(X(-29),cy+8);g.stroke();
+    for(let k=-2;k<=2;k++){if(!k)continue;g.beginPath();g.moveTo(cx-40,cy+8-k*28);g.lineTo(cx+40,cy+8-k*28);g.stroke()}
+    g.restore();
+    g.strokeStyle='#e8b04b';g.lineWidth=7;g.beginPath();g.moveTo(cx-90,cy+8);g.lineTo(cx-30,cy+8);g.lineTo(cx-30,cy+24);g.moveTo(cx+90,cy+8);g.lineTo(cx+30,cy+8);g.lineTo(cx+30,cy+24);g.stroke();
+    g.fillStyle='#2b2b2b';g.fillRect(X(-45.5),Y(-23),44,Y(-43)-Y(-23));g.fillRect(X(-28)-44,Y(-23),44,Y(-43)-Y(-23));
+    g.font='20px Menlo,monospace';g.fillStyle='#f4f1ea';g.textAlign='center';g.fillText('250',X(-45.5)+22,cy+14);g.fillText('360',X(-28)-22,cy+14);
+  }
+  // ND
+  scr(-24,-5);{const cx=X(-14.5),cy=Y(-40);g.save();g.beginPath();g.rect(X(-24),Y(-22),X(-5)-X(-24),Y(-44)-Y(-22));g.clip();g.strokeStyle='#f4f1ea';g.lineWidth=3;
+    g.beginPath();g.arc(cx,cy,190,Math.PI*1.18,Math.PI*1.82);g.stroke();
+    g.strokeStyle='#c58ab0';g.lineWidth=4;g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+30,cy-160);g.lineTo(cx+80,cy-290);g.stroke();
+    g.fillStyle='#c58ab0';g.font='20px Menlo,monospace';g.fillText('TLV',cx+40,cy-300);
+    g.fillStyle='#e8b04b';g.beginPath();g.moveTo(cx,cy-18);g.lineTo(cx-14,cy+10);g.lineTo(cx+14,cy+10);g.closePath();g.fill();
+    g.fillStyle='#f4f1ea';g.fillText('GS 482  TAS 470',cx,Y(-23.4));g.restore();}
+  // engine display
+  scr(5,24);{g.strokeStyle='#f4f1ea';g.lineWidth=3;
+    [[10.5,-29],[18.5,-29]].forEach(([a,b])=>{const cx=X(a),cy=Y(b);g.beginPath();g.arc(cx,cy,62,Math.PI*.8,Math.PI*2.2);g.stroke();
+      g.strokeStyle='#7fc99a';g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+44,cy-36);g.stroke();g.strokeStyle='#f4f1ea'});
+    g.fillStyle='#f4f1ea';g.font='20px Menlo,monospace';g.fillText('N1  84.2   84.1',X(14.5),Y(-37));g.fillText('FOB 21.4 T',X(14.5),Y(-41));}
+  // second PFD (first officer)
+  scr(27,46);{g.fillStyle='#4f6a80';rect(29,-24,44,-31.6);g.fill();g.fillStyle='#6b5843';rect(29,-31.6,44,-42);g.fill();
+    g.strokeStyle='#f4f1ea';g.lineWidth=3;g.beginPath();g.moveTo(X(29),Y(-31.6));g.lineTo(X(44),Y(-31.6));g.stroke();}
+  // pedestal with thrust levers
+  g.fillStyle='#57544d';poly([[-14,-50],[14,-50],[18,-80],[-18,-80]]);g.fill();
+  g.strokeStyle='#1b1a18';g.lineWidth=3;g.stroke();
+  [[-5,'#2d2c29'],[5,'#2d2c29']].forEach(([a,c])=>{g.fillStyle='#8b867b';rect(a-1.2,-52,a+1.2,-62);g.fill();g.fillStyle=c;rect(a-3.4,-51,a+3.4,-54.5);g.fill()});
+  g.fillStyle='#24231f';rect(-12,-66,12,-74);g.fill();g.fillStyle='#7fc99a';g.font='18px Menlo,monospace';g.fillText('FMS  DIR  PROG',X(0),Y(-69.6));
+  // side consoles and sidesticks
+  g.fillStyle='#bcb5a6';poly([[-64,-24],[-104,-24],[-100,-62],[-60,-58]]);g.fill();poly([[64,-24],[104,-24],[100,-62],[60,-58]]);g.fill();
+  const stick=(a)=>{g.fillStyle='#2a2926';g.beginPath();g.ellipse(X(a),Y(-38),46,30,0,0,7);g.fill();g.fillStyle='#3d3b36';g.beginPath();g.roundRect?g.roundRect(X(a)-26,Y(-27),52,Y(-38)-Y(-27),18):g.rect(X(a)-26,Y(-27),52,Y(-38)-Y(-27));g.fill()};
+  stick(-70);stick(70);
+  // empty first-officer seat (right)
+  g.fillStyle='#5f5b53';g.beginPath();(g.roundRect?g.roundRect(X(78),Y(14),X(104)-X(78),Y(-30)-Y(14),40):g.rect(X(78),Y(14),X(104)-X(78),Y(-30)-Y(14)));g.fill();
+  g.fillStyle='#6d695f';g.beginPath();(g.roundRect?g.roundRect(X(82),Y(22),X(100)-X(82),Y(14)-Y(22),30):g.rect(X(82),Y(22),X(100)-X(82),Y(14)-Y(22)));g.fill();
+  // floor
+  gr=g.createLinearGradient(0,Y(-62),0,H);gr.addColorStop(0,'#6f6a60');gr.addColorStop(1,'#3a3732');g.fillStyle=gr;g.fillRect(0,Y(-74),W,H);
+  // --- windows: cut them out (sky shows through) and draw the frames
+  const wins=[
+    [[-25,24],[-2.2,26],[-2.2,-9],[-27,-8]],
+    [[2.2,26],[25,24],[27,-8],[2.2,-9]],
+    [[-30,22],[-57,15],[-58,-6],[-32,-8]],
+    [[30,22],[57,15],[58,-6],[32,-8]],
+    [[-63,13],[-92,9],[-93,-4],[-64,-6]],
+    [[63,13],[92,9],[93,-4],[64,-6]],
+  ];
+  g.save();g.globalCompositeOperation='destination-out';wins.forEach(w=>{poly(w);g.fill()});g.restore();
+  g.strokeStyle='#bfb8a9';g.lineWidth=22;wins.forEach(w=>{poly(w);g.stroke()});
+  g.strokeStyle=INK;g.lineWidth=3;wins.forEach(w=>{poly(w);g.stroke()});
+  // center post
+  g.fillStyle='#bfb8a9';rect(-2.2,26,2.2,-9);g.fill();g.strokeStyle=INK;g.lineWidth=3;g.stroke();
+  // little things: compass on the post, sun visors
+  g.fillStyle=DARK;g.beginPath();g.arc(X(0),Y(23),20,0,7);g.fill();
+    return cv;
+}
+
+/* ---------- WebGL ---------- */
+const cv=document.getElementById('c');
+const gl=cv.getContext('webgl',{antialias:false,alpha:false,preserveDrawingBuffer:false});
+if(!gl){document.getElementById('err').style.display='flex'}
+const VS=`attribute vec2 p;varying vec2 v;void main(){v=p;gl_Position=vec4(p,0.,1.);}`;
+const FS=`precision highp float;varying vec2 v;
+uniform mat3 R;uniform float tanF,asp,T;uniform sampler2D tex;
+float h(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+  return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float s=0.,a=.5;for(int k=0;k<5;k++){s+=a*n(p);p=p*2.03+vec2(17.1,9.2);a*=.5;}return s;}
+const vec3 SUN=normalize(vec3(.55,.07,-.83));
+vec3 sky(vec3 d){
+  float y=d.y;
+  vec3 hor=vec3(.97,.89,.80),mid=vec3(.80,.84,.88),zen=vec3(.50,.62,.74);
+  vec3 c=mix(hor,mid,smoothstep(0.,.25,y));c=mix(c,zen,smoothstep(.2,.9,y));
+  float s=max(dot(d,SUN),0.);
+  c+=vec3(1.,.78,.52)*pow(s,8.)*.35+vec3(1.,.93,.80)*pow(s,900.)*3.;
+  // high thin cirrus
+  if(y>0.02){vec2 q=d.xz/y*3.;q.x+=T*.004;float ci=fbm(q*vec2(.35,1.6));c=mix(c,vec3(.98,.95,.92),smoothstep(.55,.85,ci)*.45*smoothstep(.02,.2,y));}
+  if(y<0.){ // cloud deck below
+    float t=-1./y;vec2 P=d.xz*t;P.y-=T*.18;
+    float dn=fbm(P*.55);float cov=smoothstep(.38,.62,dn);
+    float sh=fbm(P*.55+SUN.xz*.06);float lit=clamp(.5+(dn-sh)*6.,0.,1.);
+    vec3 top=mix(vec3(.70,.74,.80),vec3(1.,.95,.88),lit);
+    vec3 ground=vec3(.38,.45,.52);
+    vec3 cc=mix(ground,top,cov);
+    float fog=1.-exp(-t*.045);
+    c=mix(cc,hor*.98,fog);
+  }
+  return c;
+}
+void main(){
+  vec3 d=normalize(R*vec3(v.x*tanF*asp,v.y*tanF,-1.));
+  vec3 s=sky(d);
+  float u=.5+atan(d.x,-d.z)/6.2831853;float w=acos(clamp(d.y,-1.,1.))/3.1415927;
+  vec4 k=texture2D(tex,vec2(u,w));
+  gl_FragColor=vec4(mix(s,k.rgb,k.a),1.);
+}`;
+function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(o);return o}
+let prog,U={};
+if(gl){
+  prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(prog);gl.useProgram(prog);
+  const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+  const loc=gl.getAttribLocation(prog,'p');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+  ['R','tanF','asp','T','tex'].forEach(k=>U[k]=gl.getUniformLocation(prog,k));
+  const tx=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tx);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,paintCockpit());
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.REPEAT);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  gl.uniform1i(U.tex,0);
+}
+
+/* ---------- looking around: quaternions ---------- */
+const qmul=(a,b)=>[a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2]];
+const qax=(x,y,z,a)=>{const s=Math.sin(a/2);return[x*s,y*s,z*s,Math.cos(a/2)]};
+function qEulerYXZ(x,y,z){const c1=Math.cos(x/2),c2=Math.cos(y/2),c3=Math.cos(z/2),s1=Math.sin(x/2),s2=Math.sin(y/2),s3=Math.sin(z/2);
+  return[s1*c2*c3+c1*s2*s3,c1*s2*c3-s1*c2*s3,c1*c2*s3-s1*s2*c3,c1*c2*c3+s1*s2*s3]}
+function qmat(q){const[x,y,z,w]=q;return new Float32Array([1-2*(y*y+z*z),2*(x*y+z*w),2*(x*z-y*w), 2*(x*y-z*w),1-2*(x*x+z*z),2*(y*z+x*w), 2*(x*z+y*w),2*(y*z-x*w),1-2*(x*x+y*y)])}
+const rot=(q,v)=>{const m=qmat(q);return[m[0]*v[0]+m[3]*v[1]+m[6]*v[2],m[1]*v[0]+m[4]*v[1]+m[7]*v[2],m[2]*v[0]+m[5]*v[1]+m[8]*v[2]]};
+const Q1=[-Math.SQRT1_2,0,0,Math.SQRT1_2];
+let ori=null,gyroOn=false,yawOff=0,dragYaw=0,dragPitch=-4*D2R,needCenter=true,qCur=[0,0,0,1];
+function devQ(){const o=(screen.orientation&&screen.orientation.angle)||window.orientation||0;
+  let q=qEulerYXZ(ori.beta*D2R,ori.alpha*D2R,-ori.gamma*D2R);q=qmul(q,Q1);q=qmul(q,qax(0,0,1,-o*D2R));return q}
+function target(){
+  if(gyroOn&&ori){let q=devQ();
+    if(needCenter){const f=rot(q,[0,0,-1]);yawOff=Math.atan2(f[0],-f[2]);dragYaw=0;needCenter=false}
+    return qmul(qax(0,1,0,yawOff-dragYaw),q)}
+  return qmul(qax(0,1,0,-dragYaw),qax(1,0,0,dragPitch))}
+function slerp(a,b,t){let d=a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3];if(d<0){b=b.map(x=>-x);d=-d}
+  const r=a.map((x,i)=>x+(b[i]-x)*t);const l=Math.hypot(...r);return r.map(x=>x/l)}
+window.addEventListener('deviceorientation',e=>{if(e.alpha==null)return;ori={alpha:e.alpha,beta:e.beta,gamma:e.gamma};if(!gyroOn){gyroOn=true;needCenter=true;hint('Поворачивайте телефон')}});
+document.getElementById('gyro').onclick=async()=>{
+  try{if(window.DeviceOrientationEvent&&DeviceOrientationEvent.requestPermission){const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted'){hint('Без датчиков — тяните пальцем');return}}}catch(e){hint('Без датчиков — тяните пальцем');return}
+  setTimeout(()=>{if(!gyroOn)hint('Датчики недоступны — тяните пальцем')},1200)};
+document.getElementById('center').onclick=()=>{needCenter=true;dragYaw=0;dragPitch=-4*D2R};
+let last=null;
+cv.addEventListener('pointerdown',e=>{last=[e.clientX,e.clientY];cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!last)return;const k=(70*D2R)/innerHeight;
+  dragYaw-=(e.clientX-last[0])*k;if(!gyroOn)dragPitch=Math.max(-80*D2R,Math.min(80*D2R,dragPitch+(e.clientY-last[1])*k));last=[e.clientX,e.clientY]});
+cv.addEventListener('pointerup',()=>last=null);cv.addEventListener('pointercancel',()=>last=null);
+let ht;function hint(t){const h=document.getElementById('hint');h.textContent=t;h.style.opacity=1;clearTimeout(ht);ht=setTimeout(()=>h.style.opacity=0,3500)}
+hint('Тяните пальцем или нажмите «Поворот телефоном»');
+
+/* ---------- frame loop ---------- */
+const t0=performance.now();
+function frame(now){
+  const dpr=Math.min(devicePixelRatio||1,1.6),w=Math.round(innerWidth*dpr),h=Math.round(innerHeight*dpr);
+  if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;gl.viewport(0,0,w,h)}
+  qCur=slerp(qCur,target(),gyroOn?.35:.25);
+  const asp=w/h,vf=(asp<1?72:52)*D2R;
+  gl.uniformMatrix3fv(U.R,false,qmat(qCur));gl.uniform1f(U.tanF,Math.tan(vf/2));gl.uniform1f(U.asp,asp);
+  gl.uniform1f(U.T,(now-t0)/1000);
+  gl.drawArrays(gl.TRIANGLES,0,3);requestAnimationFrame(frame)}
+if(gl)requestAnimationFrame(frame);
+window.__look=(yawDeg,pitchDeg)=>{dragYaw=yawDeg*D2R;dragPitch=pitchDeg*D2R;qCur=target()};
+</script>
+</body>
+</html>
