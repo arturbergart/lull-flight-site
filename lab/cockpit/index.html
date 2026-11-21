@@ -19,7 +19,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<div class="top"><div class="k">Lull · кабина пилота</div><div class="t">Над облаками · рассвет · 11 000 м</div></div>
+<div class="top"><div class="k">Lull · кабина пилота</div><div class="t">Над облаками · 11 000 м</div></div>
 <div class="hint" id="hint">Тяните пальцем, чтобы осмотреться</div>
 <div class="bar"><button class="dark" id="gyro">Поворот телефоном</button><button id="center">По центру</button></div>
 <div class="err" id="err">Этот браузер не умеет показывать 3D-сцену.</div>
@@ -34,95 +34,82 @@ function paintCockpit(){
   const X=lon=>(0.5+lon/360)*W, Y=lat=>(0.5-lat/180)*H;
   const poly=(pts)=>{g.beginPath();pts.forEach(([lo,la],i)=>i?g.lineTo(X(lo),Y(la)):g.moveTo(X(lo),Y(la)));g.closePath()};
   const rect=(lo1,la1,lo2,la2)=>poly([[lo1,la1],[lo2,la1],[lo2,la2],[lo1,la2]]);
-  const INK='#1b1a18',WALL='#e6e1d6',WALL2='#d9d3c6',PANEL='#cdc6b7',DARK='#2a2926';
-  // walls
-  let gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#d8d2c5');gr.addColorStop(.35,WALL);gr.addColorStop(.62,WALL2);gr.addColorStop(1,'#8f897d');
+  const INK='#141414',PAPER='#f4f1ea',P2='#ece8df',P3='#e2ddd2';
+  const shape=(fill,lw)=>{g.fillStyle=fill;g.fill();g.strokeStyle=INK;g.lineWidth=lw||2.5;g.stroke()};
+  const line=(pts,lw)=>{g.beginPath();pts.forEach(([lo,la],i)=>i?g.lineTo(X(lo),Y(la)):g.moveTo(X(lo),Y(la)));g.strokeStyle=INK;g.lineWidth=lw||2;g.stroke()};
+  // paper walls, a soft shade toward the floor
+  let gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,P2);gr.addColorStop(.4,PAPER);gr.addColorStop(.7,P2);gr.addColorStop(1,'#cfcac0');
   g.fillStyle=gr;g.fillRect(0,0,W,H);
-  // back wall and door
-  g.fillStyle='#ddd7cb';rect(115,60,180,-70);g.fill();rect(-180,60,-115,-70);g.fill();
-  g.fillStyle=WALL;g.strokeStyle=INK;g.lineWidth=3;rect(148,34,172,-62);g.fill();g.stroke();
-  g.beginPath();g.arc(X(152),Y(-12),7,0,7);g.fillStyle=INK;g.fill();
-  g.fillStyle='#bdb6a7';rect(155,24,165,14);g.fill();
-  // overhead panel
-  g.fillStyle=PANEL;poly([[-34,30],[34,30],[26,78],[-26,78]]);g.fill();g.strokeStyle=INK;g.lineWidth=3;g.stroke();
-  g.lineWidth=2;
-  for(let r=0;r<7;r++){const la=35+r*5.6;const half=31-r*0.9;
-    g.strokeStyle='rgba(27,26,24,.45)';g.beginPath();g.moveTo(X(-half),Y(la-1.6));g.lineTo(X(half),Y(la-1.6));g.stroke();
-    for(let c=-half+3;c<half-2;c+=4.2){const on=((r*7+c*3)|0)%5===0;
-      g.fillStyle=on?'#f4f1ea':DARK;g.fillRect(X(c)-9,Y(la)-12,18,22);
-      if(on){g.fillStyle='#e8b04b';g.fillRect(X(c)-7,Y(la)-10,14,5)}}
-  }
-  g.font='bold 22px Helvetica,Arial';g.fillStyle=INK;g.textAlign='center';
-  [['ELEC',-20,32.2],['HYD',-7,32.2],['FUEL',7,32.2],['AIR',20,32.2]].forEach(([t,a,b])=>g.fillText(t,X(a),Y(b)));
-  // glareshield
-  g.fillStyle=DARK;poly([[-62,-9],[62,-9],[60,-19],[-60,-19]]);g.fill();
-  g.fillStyle='#3a3934';rect(-14,-11,14,-17);g.fill();
-  g.font='20px Menlo,monospace';g.fillStyle='#e8b04b';
-  [['SPD 250',-9],['HDG 112',0],['FL 360',9]].forEach(([t,a])=>g.fillText(t,X(a),Y(-14.6)));
+  // ceiling seams
+  for(const lo of [-110,-40,40,110])line([[lo,80],[lo*0.55,34]],1.5);
+  // back wall: door
+  rect(146,36,174,-64);shape(PAPER,3);line([[149,33],[171,33],[171,-61],[149,-61],[149,33]],1.2);
+  g.beginPath();g.arc(X(151.5),Y(-12),9,0,7);shape(PAPER,2.5);rect(155,26,165,16);shape(P3,2);
+  // overhead panel: outlined switches, one row of small lights
+  poly([[-34,30],[34,30],[26,78],[-26,78]]);shape(P2,3);
+  for(let r=0;r<7;r++){const la=35+r*5.6,half=31-r*0.9;line([[-half,la-2],[half,la-2]],1);
+    for(let c=-half+3;c<half-2;c+=4.2){const on=((r*7+c*3)|0)%5===0;g.beginPath();g.rect(X(c)-9,Y(la)-12,18,22);
+      g.fillStyle=on?INK:PAPER;g.fill();g.strokeStyle=INK;g.lineWidth=2;g.stroke()}}
+  g.font='500 21px Helvetica,Arial';g.fillStyle=INK;g.textAlign='center';
+  [['ELEC',-20],['HYD',-7],['FUEL',7],['AIR',20]].forEach(([t,a])=>g.fillText(t,X(a),Y(32.2)));
+  // glareshield: one black band, the autopilot window in it
+  poly([[-62,-9],[62,-9],[60,-19],[-60,-19]]);shape(INK,2);
+  rect(-14,-11.2,14,-16.8);g.strokeStyle=PAPER;g.lineWidth=2;g.stroke();
+  g.font='20px Menlo,monospace';g.fillStyle=PAPER;[['SPD 250',-9],['HDG 112',0],['FL 360',9]].forEach(([t,a])=>g.fillText(t,X(a),Y(-14.6)));
   // main panel
-  gr=g.createLinearGradient(0,Y(-19),0,Y(-52));gr.addColorStop(0,'#c7c0b1');gr.addColorStop(1,'#aea798');
-  g.fillStyle=gr;poly([[-60,-19],[60,-19],[56,-52],[-56,-52]]);g.fill();
-  // screens
-  const scr=(a,b)=>{g.fillStyle='#121212';g.strokeStyle='#3b3a36';g.lineWidth=6;rect(a,-22,b,-44);g.fill();g.stroke()};
-  // PFD
-  scr(-46,-27);{const cx=X(-36.5),cy=Y(-31),w=X(-29)-X(-44),h=Y(-41)-Y(-24);
-    g.save();g.beginPath();g.rect(X(-44),Y(-24),w,h);g.clip();
-    g.fillStyle='#4f6a80';g.fillRect(X(-44),Y(-24),w,cy-Y(-24)+8);g.fillStyle='#6b5843';g.fillRect(X(-44),cy+8,w,h);
-    g.strokeStyle='#f4f1ea';g.lineWidth=3;g.beginPath();g.moveTo(X(-44),cy+8);g.lineTo(X(-29),cy+8);g.stroke();
-    for(let k=-2;k<=2;k++){if(!k)continue;g.beginPath();g.moveTo(cx-40,cy+8-k*28);g.lineTo(cx+40,cy+8-k*28);g.stroke()}
-    g.restore();
-    g.strokeStyle='#e8b04b';g.lineWidth=7;g.beginPath();g.moveTo(cx-90,cy+8);g.lineTo(cx-30,cy+8);g.lineTo(cx-30,cy+24);g.moveTo(cx+90,cy+8);g.lineTo(cx+30,cy+8);g.lineTo(cx+30,cy+24);g.stroke();
-    g.fillStyle='#2b2b2b';g.fillRect(X(-45.5),Y(-23),44,Y(-43)-Y(-23));g.fillRect(X(-28)-44,Y(-23),44,Y(-43)-Y(-23));
-    g.font='20px Menlo,monospace';g.fillStyle='#f4f1ea';g.textAlign='center';g.fillText('250',X(-45.5)+22,cy+14);g.fillText('360',X(-28)-22,cy+14);
-  }
-  // ND
-  scr(-24,-5);{const cx=X(-14.5),cy=Y(-40);g.save();g.beginPath();g.rect(X(-24),Y(-22),X(-5)-X(-24),Y(-44)-Y(-22));g.clip();g.strokeStyle='#f4f1ea';g.lineWidth=3;
-    g.beginPath();g.arc(cx,cy,190,Math.PI*1.18,Math.PI*1.82);g.stroke();
-    g.strokeStyle='#c58ab0';g.lineWidth=4;g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+30,cy-160);g.lineTo(cx+80,cy-290);g.stroke();
-    g.fillStyle='#c58ab0';g.font='20px Menlo,monospace';g.fillText('TLV',cx+40,cy-300);
-    g.fillStyle='#e8b04b';g.beginPath();g.moveTo(cx,cy-18);g.lineTo(cx-14,cy+10);g.lineTo(cx+14,cy+10);g.closePath();g.fill();
-    g.fillStyle='#f4f1ea';g.fillText('GS 482  TAS 470',cx,Y(-23.4));g.restore();}
-  // engine display
-  scr(5,24);{g.strokeStyle='#f4f1ea';g.lineWidth=3;
-    [[10.5,-29],[18.5,-29]].forEach(([a,b])=>{const cx=X(a),cy=Y(b);g.beginPath();g.arc(cx,cy,62,Math.PI*.8,Math.PI*2.2);g.stroke();
-      g.strokeStyle='#7fc99a';g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+44,cy-36);g.stroke();g.strokeStyle='#f4f1ea'});
-    g.fillStyle='#f4f1ea';g.font='20px Menlo,monospace';g.fillText('N1  84.2   84.1',X(14.5),Y(-37));g.fillText('FOB 21.4 T',X(14.5),Y(-41));}
-  // second PFD (first officer)
-  scr(27,46);{g.fillStyle='#4f6a80';rect(29,-24,44,-31.6);g.fill();g.fillStyle='#6b5843';rect(29,-31.6,44,-42);g.fill();
-    g.strokeStyle='#f4f1ea';g.lineWidth=3;g.beginPath();g.moveTo(X(29),Y(-31.6));g.lineTo(X(44),Y(-31.6));g.stroke();}
-  // pedestal with thrust levers
-  g.fillStyle='#57544d';poly([[-14,-50],[14,-50],[18,-80],[-18,-80]]);g.fill();
-  g.strokeStyle='#1b1a18';g.lineWidth=3;g.stroke();
-  [[-5,'#2d2c29'],[5,'#2d2c29']].forEach(([a,c])=>{g.fillStyle='#8b867b';rect(a-1.2,-52,a+1.2,-62);g.fill();g.fillStyle=c;rect(a-3.4,-51,a+3.4,-54.5);g.fill()});
-  g.fillStyle='#24231f';rect(-12,-66,12,-74);g.fill();g.fillStyle='#7fc99a';g.font='18px Menlo,monospace';g.fillText('FMS  DIR  PROG',X(0),Y(-69.6));
-  // side consoles and sidesticks
-  g.fillStyle='#bcb5a6';poly([[-64,-24],[-104,-24],[-100,-62],[-60,-58]]);g.fill();poly([[64,-24],[104,-24],[100,-62],[60,-58]]);g.fill();
-  const stick=(a)=>{g.fillStyle='#2a2926';g.beginPath();g.ellipse(X(a),Y(-38),46,30,0,0,7);g.fill();g.fillStyle='#3d3b36';g.beginPath();g.roundRect?g.roundRect(X(a)-26,Y(-27),52,Y(-38)-Y(-27),18):g.rect(X(a)-26,Y(-27),52,Y(-38)-Y(-27));g.fill()};
-  stick(-70);stick(70);
-  // empty first-officer seat (right)
-  g.fillStyle='#5f5b53';g.beginPath();(g.roundRect?g.roundRect(X(78),Y(14),X(104)-X(78),Y(-30)-Y(14),40):g.rect(X(78),Y(14),X(104)-X(78),Y(-30)-Y(14)));g.fill();
-  g.fillStyle='#6d695f';g.beginPath();(g.roundRect?g.roundRect(X(82),Y(22),X(100)-X(82),Y(14)-Y(22),30):g.rect(X(82),Y(22),X(100)-X(82),Y(14)-Y(22)));g.fill();
+  poly([[-60,-19],[60,-19],[56,-52],[-56,-52]]);shape(P2,2.5);
+  const scr=(a,b)=>{rect(a,-22,b,-44);shape(INK,3)};
+  const W2=PAPER;
+  // captain PFD: horizon as a single line, the plane as an ink-white mark
+  scr(-46,-27);{const cx=X(-36.5),cy=Y(-32);g.strokeStyle=W2;g.lineWidth=2.5;
+    g.beginPath();g.moveTo(X(-41),cy);g.lineTo(X(-32),cy);g.stroke();
+    g.lineWidth=1.5;for(const k of [-2,-1,1,2]){g.beginPath();g.moveTo(cx-(k%2?36:60),cy-k*30);g.lineTo(cx+(k%2?36:60),cy-k*30);g.stroke()}
+    g.lineWidth=5;g.beginPath();g.moveTo(cx-80,cy);g.lineTo(cx-30,cy);g.lineTo(cx-30,cy+16);g.moveTo(cx+80,cy);g.lineTo(cx+30,cy);g.lineTo(cx+30,cy+16);g.stroke();
+    g.lineWidth=1.5;g.strokeRect(X(-45.3),Y(-24),40,Y(-42)-Y(-24));g.strokeRect(X(-28.2)-40,Y(-24),40,Y(-42)-Y(-24));
+    g.font='19px Menlo,monospace';g.fillStyle=W2;g.fillText('250',X(-45.3)+20,cy+7);g.fillText('360',X(-28.2)-20,cy+7)}
+  // map: arc, route as a fine dashed line
+  scr(-24,-5);{const cx=X(-14.5),cy=Y(-41);g.save();g.beginPath();g.rect(X(-24),Y(-22),X(-5)-X(-24),Y(-44)-Y(-22));g.clip();
+    g.strokeStyle=W2;g.lineWidth=2;g.beginPath();g.arc(cx,cy,190,Math.PI*1.18,Math.PI*1.82);g.stroke();
+    g.setLineDash([10,8]);g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+30,cy-160);g.lineTo(cx+80,cy-290);g.stroke();g.setLineDash([]);
+    g.beginPath();g.arc(cx+80,cy-290,7,0,7);g.stroke();g.fillStyle=W2;g.font='19px Menlo,monospace';g.fillText('TLV',cx+125,cy-284);
+    g.beginPath();g.moveTo(cx,cy-18);g.lineTo(cx-13,cy+10);g.lineTo(cx+13,cy+10);g.closePath();g.fill();
+    g.fillText('GS 482   TAS 470',cx,Y(-24.2));g.restore()}
+  // engines: two thin gauges
+  scr(5,24);{g.strokeStyle=W2;g.lineWidth=2;
+    [10.5,18.5].forEach(a=>{const cx=X(a),cy=Y(-29.5);g.beginPath();g.arc(cx,cy,60,Math.PI*.8,Math.PI*2.2);g.stroke();g.lineWidth=4;g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+44,cy-36);g.stroke();g.lineWidth=2});
+    g.fillStyle=W2;g.font='19px Menlo,monospace';g.fillText('N1  84.2   84.1',X(14.5),Y(-37.2));g.fillText('FUEL 21.4 T',X(14.5),Y(-41))}
+  // first officer PFD
+  scr(27,46);{const cy=Y(-32);g.strokeStyle=W2;g.lineWidth=2.5;g.beginPath();g.moveTo(X(31),cy);g.lineTo(X(42),cy);g.stroke();
+    g.lineWidth=5;const cx=X(36.5);g.beginPath();g.moveTo(cx-70,cy);g.lineTo(cx-26,cy);g.moveTo(cx+70,cy);g.lineTo(cx+26,cy);g.stroke()}
+  // pedestal, two thrust levers
+  poly([[-14,-50],[14,-50],[18,-80],[-18,-80]]);shape(P3,2.5);
+  [-5,5].forEach(a=>{rect(a-0.8,-52,a+0.8,-62);shape(PAPER,2);rect(a-3.4,-50.8,a+3.4,-54.4);shape(INK,2)});
+  rect(-11,-66,11,-74);shape(INK,2);g.fillStyle=PAPER;g.font='17px Menlo,monospace';g.fillText('FMS   DIR   PROG',X(0),Y(-69.8));
+  for(let k=0;k<6;k++){g.beginPath();g.rect(X(-9+k*3.6)-12,Y(-76)-9,24,18);g.strokeStyle=INK;g.lineWidth=1.5;g.stroke()}
+  // side consoles, sidesticks
+  poly([[-64,-24],[-104,-24],[-100,-62],[-60,-58]]);shape(P3,2.5);poly([[64,-24],[104,-24],[100,-62],[60,-58]]);shape(P3,2.5);
+  [-70,70].forEach(a=>{g.beginPath();g.ellipse(X(a),Y(-38),46,30,0,0,7);shape(PAPER,2.5);
+    g.beginPath();g.rect(X(a)-22,Y(-26),44,Y(-37)-Y(-26));shape(INK,2)});
+  // the empty seat on the right: outline only
+  g.beginPath();g.roundRect?g.roundRect(X(78),Y(14),X(104)-X(78),Y(-30)-Y(14),46):g.rect(X(78),Y(14),X(104)-X(78),Y(-30)-Y(14));shape(P2,3);
+  g.beginPath();g.roundRect?g.roundRect(X(83),Y(23),X(99)-X(83),Y(15)-Y(23),30):g.rect(X(83),Y(23),X(99)-X(83),Y(15)-Y(23));shape(P2,3);
+  line([[91,10],[91,-24]],1.5);
   // floor
-  gr=g.createLinearGradient(0,Y(-62),0,H);gr.addColorStop(0,'#6f6a60');gr.addColorStop(1,'#3a3732');g.fillStyle=gr;g.fillRect(0,Y(-74),W,H);
-  // --- windows: cut them out (sky shows through) and draw the frames
+  gr=g.createLinearGradient(0,Y(-74),0,H);gr.addColorStop(0,'#d9d4c9');gr.addColorStop(1,'#b9b4aa');g.fillStyle=gr;g.fillRect(0,Y(-80),W,H);
+  line([[-180,-80],[180,-80]],2);
+  // windows: cut out, then a double ink frame
   const wins=[
-    [[-25,24],[-2.2,26],[-2.2,-9],[-27,-8]],
-    [[2.2,26],[25,24],[27,-8],[2.2,-9]],
-    [[-30,22],[-57,15],[-58,-6],[-32,-8]],
-    [[30,22],[57,15],[58,-6],[32,-8]],
-    [[-63,13],[-92,9],[-93,-4],[-64,-6]],
-    [[63,13],[92,9],[93,-4],[64,-6]],
-  ];
+    [[-25,24],[-2.2,26],[-2.2,-9],[-27,-8]],[[2.2,26],[25,24],[27,-8],[2.2,-9]],
+    [[-30,22],[-57,15],[-58,-6],[-32,-8]],[[30,22],[57,15],[58,-6],[32,-8]],
+    [[-63,13],[-92,9],[-93,-4],[-64,-6]],[[63,13],[92,9],[93,-4],[64,-6]]];
   g.save();g.globalCompositeOperation='destination-out';wins.forEach(w=>{poly(w);g.fill()});g.restore();
-  g.strokeStyle='#bfb8a9';g.lineWidth=22;wins.forEach(w=>{poly(w);g.stroke()});
+  g.strokeStyle=PAPER;g.lineWidth=26;wins.forEach(w=>{poly(w);g.stroke()});
   g.strokeStyle=INK;g.lineWidth=3;wins.forEach(w=>{poly(w);g.stroke()});
-  // center post
-  g.fillStyle='#bfb8a9';rect(-2.2,26,2.2,-9);g.fill();g.strokeStyle=INK;g.lineWidth=3;g.stroke();
-  // little things: compass on the post, sun visors
-  g.fillStyle=DARK;g.beginPath();g.arc(X(0),Y(23),20,0,7);g.fill();
-    return cv;
+  g.lineWidth=1.3;wins.forEach(w=>{const c=w.reduce((a,p)=>[a[0]+p[0]/4,a[1]+p[1]/4],[0,0]);poly(w.map(([a,b])=>[c[0]+(a-c[0])*1.07,c[1]+(b-c[1])*1.09]));g.stroke()});
+  rect(-2.2,26,2.2,-9);shape(PAPER,3);
+  g.beginPath();g.arc(X(0),Y(23),18,0,7);shape(PAPER,2.5);line([[0,24],[0,22]],2);
+  return cv;
 }
-
 /* ---------- WebGL ---------- */
 const cv=document.getElementById('c');
 const gl=cv.getContext('webgl',{antialias:false,alpha:false,preserveDrawingBuffer:false});
@@ -160,7 +147,8 @@ void main(){
   vec3 s=sky(d);
   float u=.5+atan(d.x,-d.z)/6.2831853;float w=acos(clamp(d.y,-1.,1.))/3.1415927;
   vec4 k=texture2D(tex,vec2(u,w));
-  gl_FragColor=vec4(mix(s,k.rgb,k.a),1.);
+  float L=dot(s,vec3(.299,.587,.114));vec3 sg=mix(vec3(.08),vec3(.957,.945,.918),clamp((L-.2)*1.22,0.,1.));
+  gl_FragColor=vec4(mix(sg,k.rgb,k.a),1.);
 }`;
 function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(o);return o}
 let prog,U={};
